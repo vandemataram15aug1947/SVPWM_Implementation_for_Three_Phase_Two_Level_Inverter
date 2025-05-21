@@ -1,12 +1,26 @@
-# SVPWM_Implementation_for_Three_Phase_Two_Level_Inverter
+# SVPWM Implementation for Three-Phase Two-Level Inverter
 
-# 🔲 Space Vector Pulse Width Modulation (SVPWM)
+## Introduction
 
-## 📘 Introduction
+Space Vector Pulse Width Modulation (SVPWM) is an advanced PWM technique widely used to control three-phase voltage source inverters. Unlike traditional sinusoidal PWM, SVPWM treats the inverter as a single unit and manipulates the output voltage vector directly in the two-dimensional α-β stationary reference frame.
 
-Space Vector Pulse Width Modulation (SVPWM) is an advanced PWM technique used to control three-phase inverters more efficiently than traditional sinusoidal PWM. By treating the inverter as a single unit, SVPWM synthesizes the desired output voltage vector through a combination of switching states. This approach improves DC bus utilization, reduces total harmonic distortion (THD), and enhances overall system efficiency.
+**Key benefits of SVPWM:**
+
+- Improved DC bus voltage utilization  
+- Reduced total harmonic distortion (THD)  
+- Enhanced inverter efficiency and output waveform quality  
+
+This technique is commonly employed in motor drives, renewable energy systems, and various power electronics applications.
 
 ---
+
+## SVPWM Principle
+
+SVPWM represents the inverter output voltage as a space vector in the α-β plane, synthesized by switching between the nearest active voltage vectors and zero vectors within each PWM cycle.
+
+- The α-β plane is divided into six 60° sectors.  
+- The reference voltage vector is synthesized by time-weighted switching of two adjacent active vectors and one or two zero vectors.  
+- PWM duty cycles for phases A, B, and C are calculated based on these dwell times.
 
 ## 🧠 Theory
 
@@ -134,149 +148,10 @@ For a given scenario where:
 
 You can calculate the vector times using the above formulae.
 
-
----
-
-
-# Code Explanation
-
-## Include Required Header Files
-
-```c
-#include "stdint.h"         /* Standard integer types */
-#include "math.h"           /* Standard math library */
-#include "IQmathLib.h"      /* TI's fixed-point math library */
-
-#include "device.h"         /* Device-specific configuration */
-#include "ADC.h"            /* ADC configuration and data handling */
-#include "eQEP.h"           /* Quadrature encoder interface */
-
-#include "CLARKE.h"         /* Clarke transformation (abc → αβ) */
-#include "PARK.h"           /* Park transformation (αβ → dq) */
-#include "iPARK.h"          /* Inverse Park transformation (dq → αβ) */
-#include "iCLARKE.h"        /* Inverse Clarke transformation (αβ → abc) */
-#include "SVPWM.h"          /* Space Vector PWM generation */
 ```
 
-## Headers and Functionality
+## SVPWM Generation Code
 
-Here is a list of the headers used in this project and their specific functionality:
-
-- **`"stdint.h"`**: Standard integer types (such as `int32_t`, `uint16_t`) for improved portability across platforms.
-- **`"math.h"`**: Standard math library providing functions like `sin()`, `cos()`, and `atan2()` for performing trigonometric calculations.
-- **`"IQmathLib.h"`**: TI's fixed-point math library, enabling efficient fixed-point mathematical operations.
-- **`"device.h"`**: Device-specific configuration, such as microcontroller settings, peripheral initialization, and clock configuration.
-- **`"ADC.h"`**: ADC driver functions for configuring and handling Analog-to-Digital Conversion (ADC) to acquire motor currents and rotor speed.
-- **`"eQEP.h"`**: Quadrature Encoder Pulse (eQEP) interface, used for acquiring encoder data to monitor rotor position and speed.
-- **`"CLARKE.h"`**: Clarke transformation (abc → αβ), used to convert a 3-phase system to a 2-phase system in motor control.
-- **`"PARK.h"`**: Park transformation (αβ → dq), which is used to convert the αβ frame to the dq frame for motor control, aligned with the rotor.
-- **`"PI.h"`**: Contains the implementation of Proportional-Integral (PI) controllers, which are used for feedback control in motor control systems. The PI controller calculates the error between the reference and measured values (e.g., motor speed or position), and adjusts the control signal to minimize this error, ensuring stable motor operation.
-- **`"iPARK.h"`**: Inverse Park transformation (dq → αβ), which converts the dq frame back to the αβ frame.
-- **`"iCLARKE.h"`**: Inverse Clarke transformation (αβ → abc), which converts the 2-phase system back to the 3-phase system for motor drive.
-- **`"SVPWM.h"`**: Space Vector Pulse Width Modulation (SVPWM) generation, used to control motor voltage using space vector modulation techniques.
-
----
-
-
-## 🔁 FOC Control Loop Summary
-
-### Code Implementation
-
-### Global Variables
-```c
-/* Global Variables */
-float i_alpha, i_beta;      /* Alpha-beta current components */
-float i_d, i_q;             /* Direct-quadrature currents */
-float v_d = 0, v_q = 0;     /* Direct-quadrature voltage components */
-float v_alpha, v_beta;      /* Inverse Clarke transform results */
-float theta;                /* Rotor position from encoder */
-float omega_actual;         /* Actual rotor speed */
-float omega_ref = 1500;     /* Reference speed in RPM */
-float i_d_ref = 0.0f;       /* d-axis current reference */
-float i_q_ref = 2.0f;       /* q-axis current reference */
-```
-
-### Encoder Read (Position Feedback)
-```c
-/* Encoder Read Function */
-/* Reads the current rotor position from encoder */
-float encoder_read() {
-    return get_encoder_position();  /* Read encoder feedback */
-}
-```
-
-### Clarke Transform (ABC to αβ)
-```c
-/* Clarke Transform Function */
-/* Converts 3-phase current (i_a, i_b, i_c) to 2-phase orthogonal (i_alpha, i_beta) */
-void clarke_transform(float i_a, float i_b, float i_c) {
-    i_alpha = i_a;
-    i_beta = (i_a + 2.0f * i_b) / sqrtf(3.0f);  /* Assuming balanced system */
-}
-```
-
-### Park Transform (αβ → dq)
-```c
-/* Park Transform Function */
-/* Converts (i_alpha, i_beta) into rotating reference frame components (i_d, i_q) */
-void park_transform(float theta) {
-    float sin_theta = sinf(theta);  /* Calculate sin(theta) */
-    float cos_theta = cosf(theta);  /* Calculate cos(theta) */
-    
-    i_d = i_alpha * cos_theta + i_beta * sin_theta;    /* d-axis current */
-    i_q = -i_alpha * sin_theta + i_beta * cos_theta;   /* q-axis current */
-}
-```
-
-### Speed PI Controller
-```c
-/* Speed PI Controller */
-/* Implements a basic PI controller for speed regulation */
-void speed_control(float omega_actual) {
-    static float integral = 0;           /* Integral term storage */
-    float error = omega_ref - omega_actual;  /* Speed error */
-    float Kp = 0.01f, Ki = 0.005f;       /* PI controller gains */
-    
-    integral += error * Ki;              /* Integrate error */
-    integral = fminf(fmaxf(integral, -1.0f), 1.0f);  /* Anti-windup: limit integral */
-    
-    v_q = (Kp * error) + integral;       /* Output q-axis voltage command */
-}
-
-/* Current PI Controller */
-/* Controls i_d and i_q to track reference values */
-void current_pi_control() {
-    static float int_d = 0, int_q = 0;   /* Integral terms */
-    float Kp = 0.2f, Ki = 0.01f;         /* PI gains for current loops */
-    
-    float error_d = i_d_ref - i_d;       /* Error in d-axis current */
-    float error_q = i_q_ref - i_q;       /* Error in q-axis current */
-    
-    int_d += error_d * Ki;               /* Integrate d error */
-    int_q += error_q * Ki;               /* Integrate q error */
-    
-    int_d = fminf(fmaxf(int_d, -1.0f), 1.0f);  /* Anti-windup for d */
-    int_q = fminf(fmaxf(int_q, -1.0f), 1.0f);  /* Anti-windup for q */
-    
-    v_d = (Kp * error_d) + int_d;        /* Output d-axis voltage */
-    v_q = (Kp * error_q) + int_q;        /* Output q-axis voltage */
-}
-```
-
-### Inverse Park Transform (dq → αβ)
-```c
-/* Inverse Park Transform Function */
-/* Converts (v_d, v_q) from rotating to stationary reference frame (v_alpha, v_beta) */
-void inverse_park_transform(float theta) {
-    float sin_theta = sinf(theta);      /* Calculate sin(theta) */
-    float cos_theta = cosf(theta);      /* Calculate cos(theta) */
-    
-    v_alpha = v_d * cos_theta - v_q * sin_theta;  /* Alpha-axis voltage */
-    v_beta = v_q * cos_theta + v_d * sin_theta;   /* Beta-axis voltage */
-}
-```
-
-### SVPWM Generation
 ```c
 #include "driverlib.h"
 #include "math.h"
@@ -286,7 +161,7 @@ void inverse_park_transform(float theta) {
 void generate_svpwm_pulses(float v_alpha, float v_beta) {
     float v_ref = sqrtf(v_alpha * v_alpha + v_beta * v_beta);  /* Magnitude of voltage vector */
     float angle = atan2f(v_beta, v_alpha);                     /* Angle of voltage vector */
-    
+
     if (angle < 0) angle += 2.0f * M_PI;                       /* Wrap angle into [0, 2π] */
 
     int sector_num = (int)(angle / (M_PI / 3.0f));             /* Determine sector (0 to 5) */
@@ -341,41 +216,46 @@ void generate_svpwm_pulses(float v_alpha, float v_beta) {
 }
 ```
 
-### Main Loop
-```c
-/* Main Entry Point */
-int main() {
-    /* Initialize encoder and peripherals */
-    pwm_init();         /* PWM peripheral setup */
-    adc_init();         /* ADC initialization for i_a, i_b, i_c */
-    
-    while (1) {
-        /* Step 1: Read actual rotor position */
+## Explanation
 
-        /* Step 2: Read 3-phase currents */
-        float i_a = read_adc_current_A();
-        float i_b = read_adc_current_B();
-        float i_c = read_adc_current_C();
+### Voltage Vector Representation
 
-        /* Step 3: Clarke and Park transforms */
-        clarke_transform(i_a, i_b, i_c);
-        park_transform(theta);
+* The inputs `v_alpha` and `v_beta` represent the voltage vector in stationary reference frame.
+* `v_ref` is the magnitude and `angle` is the orientation of this vector.
 
-        /* Step 4: Speed PI controller (if speed control is used) */
-        omega_actual = calculate_speed_from_encoder();
-        speed_control(omega_actual);  /* Updates v_q */
+### Sector Identification
 
-        /* Step 5: Current PI controller */
-        current_pi_control();         /* Updates v_d and v_q */
+* The vector space is divided into 6 sectors (each 60°).
+* Based on `angle`, the corresponding sector is identified using:
 
-        /* Step 6: Inverse Park Transform */
-        inverse_park_transform(theta);
+  ```c
+  int sector_num = (int)(angle / (M_PI / 3.0f));
+  ```
 
-        /* Step 7: SVPWM signal generation */
-        generate_svpwm_pulses(v_alpha, v_beta);
-    }
+### Timing Calculations
 
-    return 0;
-}
+* In each sector, the duration for the two adjacent vectors (`t1` and `t2`) and zero vector (`t0`) are calculated.
+* These times determine the voltage vector placement in one switching cycle.
 
-```
+### Duty Cycle Computation
+
+* Ta, Tb, and Tc represent the on-time fraction for each phase.
+* The sum of `t1`, `t2`, and `t0` equals the switching period `T` (normalized to 1).
+
+### PWM Output
+
+* The duty cycles are applied to the three inverter legs (A, B, C).
+* API `PWM_setDutyCycle()` is assumed to map these duty cycles into actual PWM registers.
+
+## Integration
+
+Use this function in your motor control or inverter firmware loop after computing the `v_alpha` and `v_beta` outputs from the inverse Park transform.
+
+## Dependencies
+
+* `math.h` for trigonometric functions.
+* `driverlib.h` for PWM hardware interface (specific to your MCU platform).
+
+## License
+
+MIT or any appropriate open-source license as per your project.
